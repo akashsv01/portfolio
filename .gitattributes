@@ -1,0 +1,2 @@
+# Normalize line endings; reduces CRLF/LF warnings on Windows
+* text=auto
