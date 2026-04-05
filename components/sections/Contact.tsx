@@ -29,31 +29,54 @@ export default function Contact() {
     e.preventDefault();
     setStatus("loading");
     setErrMsg("");
+
+    /** Inlined at build time — must be NEXT_PUBLIC_* and match Web3Forms dashboard. */
+    const accessKey = process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY?.trim();
+    if (!accessKey) {
+      setStatus("error");
+      setErrMsg(
+        "Automatic delivery isn’t active: set NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY in .env.local (your Web3Forms key), restart the dev server, and add the same variable on Vercel then redeploy. Until then, use “Say Hello” above."
+      );
+      return;
+    }
+
     try {
-      const res = await fetch("/api/contact", {
+      const res = await fetch("https://api.web3forms.com/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          access_key: accessKey,
+          name: form.name,
+          email: form.email,
+          message: form.message,
+          subject: `Portfolio: ${form.name}`,
+          from_name: form.name,
+          replyto: form.email,
+        }),
       });
-      const data = (await res.json()) as { ok?: boolean; fallback?: boolean; error?: string };
+      const raw = await res.text();
+      const cleaned = raw.replace(/^\uFEFF/, "").trim();
+      let data: { success?: boolean; message?: string } = {};
+      if (cleaned) {
+        try {
+          data = JSON.parse(cleaned) as typeof data;
+        } catch {
+          setStatus("error");
+          setErrMsg(
+            "The email service returned a non-JSON response. Check your Web3Forms access key and dashboard settings."
+          );
+          return;
+        }
+      }
 
-      if (res.ok && data.ok) {
-        setStatus("success");
-        setForm({ name: "", email: "", message: "" });
+      if (!res.ok || !data.success) {
+        setStatus("error");
+        setErrMsg(data.message || "Could not send. Try the Say Hello button or email directly.");
         return;
       }
 
-      if (res.status === 501 && data.fallback) {
-        const q = encodeURIComponent(`Portfolio: ${form.name}`);
-        const body = encodeURIComponent(`From: ${form.name} <${form.email}>\n\n${form.message}`);
-        window.location.href = `mailto:${personal.email}?subject=${q}&body=${body}`;
-        setStatus("success");
-        setForm({ name: "", email: "", message: "" });
-        return;
-      }
-
-      setStatus("error");
-      setErrMsg(data.error || "Something went wrong. Try the button above or email directly.");
+      setStatus("success");
+      setForm({ name: "", email: "", message: "" });
     } catch {
       setStatus("error");
       setErrMsg("Network error. Please email directly.");
