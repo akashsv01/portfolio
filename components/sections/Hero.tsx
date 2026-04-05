@@ -55,16 +55,27 @@ export default function Hero() {
   const roleRef = useRef(0);
   const charRef = useRef(0);
   const deletingRef = useRef(false);
-  const { roles } = personal;
-
   useEffect(() => {
+    const roles = personal.roles;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const delay = deletingRef.current ? 38 : 75;
+      timeoutId = setTimeout(tick, delay);
+    };
+
     const tick = () => {
+      if (cancelled) return;
       const current = roles[roleRef.current];
       if (!deletingRef.current) {
         charRef.current++;
         setTypedText(current.substring(0, charRef.current));
         if (charRef.current === current.length) {
-          setTimeout(() => { deletingRef.current = true; }, 2200);
+          setTimeout(() => {
+            deletingRef.current = true;
+          }, 2200);
         }
       } else {
         charRef.current--;
@@ -74,10 +85,15 @@ export default function Hero() {
           roleRef.current = (roleRef.current + 1) % roles.length;
         }
       }
+      scheduleNext();
     };
-    const interval = setInterval(tick, deletingRef.current ? 38 : 75);
-    return () => clearInterval(interval);
-  });
+
+    scheduleNext();
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, []);
 
   return (
     <section id="home" className="hero-section">

@@ -23,7 +23,9 @@ export default function Home() {
 
   useEffect(() => {
     const allSections = ["home", ...navSections];
-    const handler = () => {
+    let rafId = 0;
+
+    const updateActiveSection = () => {
       const offsets = allSections
         .map((id) => {
           const el = document.getElementById(id);
@@ -32,10 +34,23 @@ export default function Home() {
         .filter(Boolean) as { id: string; top: number }[];
       if (offsets.length === 0) return;
       const closest = offsets.reduce((a, b) => (b.top < a.top ? b : a));
-      setActive(closest.id);
+      setActive((prev) => (prev === closest.id ? prev : closest.id));
     };
+
+    const handler = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        updateActiveSection();
+      });
+    };
+
+    updateActiveSection();
     window.addEventListener("scroll", handler, { passive: true });
-    return () => window.removeEventListener("scroll", handler);
+    return () => {
+      window.removeEventListener("scroll", handler);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
   }, []);
 
   return (
