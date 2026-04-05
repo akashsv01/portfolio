@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -51,6 +51,10 @@ export default function FloatingParticles() {
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     return geo;
   }, [positions]);
+
+  useEffect(() => {
+    return () => geometry.dispose();
+  }, [geometry]);
 
   return (
     <points ref={meshRef} geometry={geometry}>

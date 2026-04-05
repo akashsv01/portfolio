@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useMemo, useState } from "react";
+import { useRef, useMemo, useState, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Billboard } from "@react-three/drei";
 import * as THREE from "three";
@@ -92,6 +92,7 @@ function GlowRing({ radius = 0.35 }: { radius?: number }) {
 function HoverLabel({ text, yOffset = 0.5 }: { text: string; yOffset?: number }) {
   const tex = useMemo(() => makeLabelTex(text), [text]);
   const meshRef = useRef<THREE.Mesh>(null);
+  useEffect(() => () => tex.dispose(), [tex]);
   useFrame((s) => {
     if (meshRef.current) {
       meshRef.current.position.y = yOffset + Math.sin(s.clock.elapsedTime * 2.5) * 0.04;
@@ -121,6 +122,7 @@ function Monitor({
   const lightRef = useRef<THREE.PointLight>(null);
   const [hovered, setHovered] = useState(false);
   const tex = useMemo(() => makeScreenTex(lines, "#0a0f1e"), [lines]);
+  useEffect(() => () => tex.dispose(), [tex]);
   const w = isMain ? 2.2 : 1.7;
   const h = isMain ? 1.3 : 1.0;
 

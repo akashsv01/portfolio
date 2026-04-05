@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  memo,
   useRef,
   useState,
   useMemo,
@@ -11,7 +12,7 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { Stars, Billboard, Grid, MeshDistortMaterial, Sparkles, Html } from "@react-three/drei";
 import * as THREE from "three";
 import { personal } from "@/lib/data";
@@ -787,8 +788,10 @@ function ConstellationGroup({
 
 function Scene({
   constellationOffset,
+  lowPower,
 }: {
   constellationOffset: [number, number, number];
+  lowPower: boolean;
 }) {
   const mouseRef = useRef({ x: 0, y: 0 });
 
@@ -810,29 +813,29 @@ function Scene({
       <Stars
         radius={110}
         depth={70}
-        count={2400}
-        factor={2.8}
+        count={lowPower ? 1500 : 2400}
+        factor={lowPower ? 2.1 : 2.8}
         saturation={0}
         fade
         speed={0.38}
       />
       <Sparkles
-        count={100}
-        scale={[14, 10, 14]}
+        count={lowPower ? 64 : 100}
+        scale={lowPower ? [12, 8, 12] : [14, 10, 14]}
         position={[0, 0.4, 0]}
         size={2.2}
         speed={0.25}
-        opacity={0.4}
+        opacity={lowPower ? 0.3 : 0.4}
         color="#7dd3fc"
         noise={0.22}
       />
       <Sparkles
-        count={45}
-        scale={[8, 6, 8]}
+        count={lowPower ? 28 : 45}
+        scale={lowPower ? [7, 5, 7] : [8, 6, 8]}
         position={[0, 0.2, 0]}
         size={1.4}
         speed={0.4}
-        opacity={0.25}
+        opacity={lowPower ? 0.2 : 0.25}
         color="#00d4ff"
         noise={0.15}
       />
@@ -879,27 +882,14 @@ function HeroSpinner() {
   );
 }
 
-/** Tells the browser we handle context loss so it can attempt restore instead of leaving the canvas dead. */
-function WebGLContextSafety() {
-  const gl = useThree((s) => s.gl);
-  useEffect(() => {
-    const canvas = gl.domElement;
-    const onLost = (e: Event) => {
-      e.preventDefault();
-    };
-    canvas.addEventListener("webglcontextlost", onLost, false);
-    return () => canvas.removeEventListener("webglcontextlost", onLost);
-  }, [gl]);
-  return null;
-}
-
 export type TechSphereProps = {
   variant?: "hero" | "compact";
 };
 
-export default function TechSphere({ variant = "hero" }: TechSphereProps) {
+function TechSphere({ variant = "hero" }: TechSphereProps) {
   const mounted = useClientOnly();
   const [tabHidden, setTabHidden] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(1280);
 
   useEffect(() => {
     const h = () => setTabHidden(document.hidden);
@@ -908,14 +898,30 @@ export default function TechSphere({ variant = "hero" }: TechSphereProps) {
     return () => document.removeEventListener("visibilitychange", h);
   }, []);
 
+  useEffect(() => {
+    const updateViewport = () => setViewportWidth(window.innerWidth);
+    updateViewport();
+    window.addEventListener("resize", updateViewport, { passive: true });
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
   const isHero = variant === "hero";
   const cameraPosition: [number, number, number] = isHero ? [0, 0.22, 8.1] : [0, 0.5, 7];
   const cameraFov = isHero ? 50 : 50;
   const constellationOffset: [number, number, number] = isHero ? [0.12, 0, 0] : [2, 0, 0];
+  const lowPower = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    const nav = navigator as Navigator & { deviceMemory?: number };
+    const deviceMemory = nav.deviceMemory ?? 8;
+    const cores = navigator.hardwareConcurrency ?? 8;
+    return viewportWidth < 900 || deviceMemory <= 4 || cores <= 4;
+  }, [viewportWidth]);
 
   if (!mounted) return <HeroSpinner />;
 
-  const maxDpr = typeof window !== "undefined" ? Math.min(1.5, window.devicePixelRatio || 1.5) : 1.5;
+  const maxDpr = typeof window !== "undefined"
+    ? Math.min(lowPower ? 1.2 : 1.5, window.devicePixelRatio || 1.5)
+    : lowPower ? 1.2 : 1.5;
 
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
@@ -930,7 +936,7 @@ export default function TechSphere({ variant = "hero" }: TechSphereProps) {
         }}
         camera={{ fov: cameraFov, near: 0.1, far: 300, position: cameraPosition }}
         gl={{
-          antialias: true,
+          antialias: !lowPower,
           alpha: true,
           powerPreference: "default",
         }}
@@ -941,11 +947,12 @@ export default function TechSphere({ variant = "hero" }: TechSphereProps) {
         }}
         dpr={[1, maxDpr]}
       >
-        <WebGLContextSafety />
         <Suspense fallback={null}>
-          <Scene constellationOffset={constellationOffset} />
+          <Scene constellationOffset={constellationOffset} lowPower={lowPower} />
         </Suspense>
       </Canvas>
     </div>
   );
 }
+
+export default memo(TechSphere);
