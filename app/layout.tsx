@@ -30,6 +30,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://www.akashsvora.dev"),
   icons: {
     icon: [{ url: "/favicon.png", type: "image/png" }],
     apple: [{ url: "/favicon.png", type: "image/png" }],
@@ -47,12 +48,21 @@ export const metadata: Metadata = {
     "UMD",
     "Cisco",
   ],
-  authors: [{ name: "Akash Vora" }],
+  authors: [{ name: "Akash S Vora" }],
   openGraph: {
-    title: "Akash Vora — Software Engineer",
+    title: "Akash S Vora — Software Engineer",
     description:
-      "Portfolio of Akash Vora — Software Engineer, AI/ML Enthusiast.",
+      "Portfolio of Akash S Vora — Software Engineer, AI/ML Enthusiast. Masters @ UMD · Gold Medalist · Ex-Cisco.",
     type: "website",
+    url: "https://www.akashsvora.dev",
+    siteName: "Akash S Vora",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Akash S Vora — Software Engineer",
+    description:
+      "Portfolio of Akash S Vora — Software Engineer, AI/ML Enthusiast. Masters @ UMD · Gold Medalist · Ex-Cisco.",
   },
 };
 
