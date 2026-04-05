@@ -11,7 +11,7 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Stars, Billboard, Grid, MeshDistortMaterial, Sparkles, Html } from "@react-three/drei";
 import * as THREE from "three";
 import { personal } from "@/lib/data";
@@ -33,7 +33,7 @@ function makeLabelTex(text: string, fg: string): THREE.CanvasTexture {
   );
 
   const pr =
-    typeof window !== "undefined" ? Math.min(2.75, window.devicePixelRatio || 2) : 2;
+    typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio || 2) : 2;
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(2, Math.floor(logicalW * pr));
@@ -879,12 +879,34 @@ function HeroSpinner() {
   );
 }
 
+/** Tells the browser we handle context loss so it can attempt restore instead of leaving the canvas dead. */
+function WebGLContextSafety() {
+  const gl = useThree((s) => s.gl);
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const onLost = (e: Event) => {
+      e.preventDefault();
+    };
+    canvas.addEventListener("webglcontextlost", onLost, false);
+    return () => canvas.removeEventListener("webglcontextlost", onLost);
+  }, [gl]);
+  return null;
+}
+
 export type TechSphereProps = {
   variant?: "hero" | "compact";
 };
 
 export default function TechSphere({ variant = "hero" }: TechSphereProps) {
   const mounted = useClientOnly();
+  const [tabHidden, setTabHidden] = useState(false);
+
+  useEffect(() => {
+    const h = () => setTabHidden(document.hidden);
+    h();
+    document.addEventListener("visibilitychange", h);
+    return () => document.removeEventListener("visibilitychange", h);
+  }, []);
 
   const isHero = variant === "hero";
   const cameraPosition: [number, number, number] = isHero ? [0, 0.22, 8.1] : [0, 0.5, 7];
@@ -893,9 +915,12 @@ export default function TechSphere({ variant = "hero" }: TechSphereProps) {
 
   if (!mounted) return <HeroSpinner />;
 
+  const maxDpr = typeof window !== "undefined" ? Math.min(1.5, window.devicePixelRatio || 1.5) : 1.5;
+
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas
+        frameloop={tabHidden ? "never" : "always"}
         style={{
           position: "absolute",
           inset: 0,
@@ -907,15 +932,16 @@ export default function TechSphere({ variant = "hero" }: TechSphereProps) {
         gl={{
           antialias: true,
           alpha: true,
-          powerPreference: "high-performance",
+          powerPreference: "default",
         }}
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 1.28;
           gl.setClearColor(0x000000, 0);
         }}
-        dpr={[1, Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio : 1.5)]}
+        dpr={[1, maxDpr]}
       >
+        <WebGLContextSafety />
         <Suspense fallback={null}>
           <Scene constellationOffset={constellationOffset} />
         </Suspense>

@@ -49,6 +49,10 @@ export default function ConstellationBG() {
     window.addEventListener("mousemove", handleMouse);
 
     const animate = () => {
+      if (document.hidden) {
+        animRef.current = null;
+        return;
+      }
       ctx.clearRect(0, 0, w, h);
       const mouse = mouseRef.current;
 
@@ -109,9 +113,20 @@ export default function ConstellationBG() {
 
       animRef.current = requestAnimationFrame(animate);
     };
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (animRef.current) cancelAnimationFrame(animRef.current);
+        animRef.current = null;
+      } else if (!animRef.current) {
+        animRef.current = requestAnimationFrame(animate);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     animate();
 
     return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("resize", resize);
       window.removeEventListener("mousemove", handleMouse);
       if (animRef.current) cancelAnimationFrame(animRef.current);

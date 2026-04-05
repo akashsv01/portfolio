@@ -128,6 +128,10 @@ export default function SkillsNetwork() {
     let raf = 0;
     let last = performance.now();
     const loop = (now: number) => {
+      if (document.hidden) {
+        raf = 0;
+        return;
+      }
       const dt = Math.min(48, now - last);
       last = now;
       if (!hoverPauseRef.current) {
@@ -135,8 +139,18 @@ export default function SkillsNetwork() {
       }
       raf = requestAnimationFrame(loop);
     };
+    const resume = () => {
+      if (!document.hidden && raf === 0) {
+        last = performance.now();
+        raf = requestAnimationFrame(loop);
+      }
+    };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      document.removeEventListener("visibilitychange", resume);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [reducedMotion]);
 
   const positions = useMemo(() => {
