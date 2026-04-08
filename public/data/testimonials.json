@@ -1,0 +1,37 @@
+{
+  "testimonials": [
+    {
+      "id": "jagadeesan-subramani",
+      "name": "Jagadeesan Subramani",
+      "title": "Leader, Customer Delivery",
+      "company": "Cisco Systems India Pvt Ltd",
+      "linkedin": "https://www.linkedin.com/in/jagadeesan-subramani-5327a337/",
+      "date": "July 15, 2025",
+      "relationship": "Jagadeesan managed Akash directly",
+      "text": "Akash, you are a true team player and have been a valuable contributor to the team. Within just two years of your tenure at Cisco, you have consistently demonstrated strong technical skills and commitment to your work. In addition to your professional achievements, you have actively participated in the TAC Olympics and taken part in many cultural events at Cisco. Your dedication and enthusiasm, both at work and beyond, are truly appreciated. Wishing you the best of luck in your future endeavors.",
+      "image": "/testimonials/jagadeesan.jpg"
+    },
+    {
+      "id": "ankit-kapoor",
+      "name": "Ankit Kapoor",
+      "title": "HTTS SP Team Lead at Cisco | Ex JTAC",
+      "company": "",
+      "linkedin": "https://www.linkedin.com/in/ankit-kapoor-0b8099177/",
+      "date": "July 12, 2025",
+      "relationship": "Ankit was senior to Akash but didn't manage Akash directly",
+      "text": "I had the pleasure of working with Akash at Cisco. He consistently impressed with his deep technical knowledge, sharp problem solving abilities, and calm professionalism, even under pressure. Akash was a team player, quick to learn, and always went the extra mile to support both customers and colleagues. He is truly a standout engineer and a great asset to any team.",
+      "image": "/testimonials/ankit.jpg"
+    },
+    {
+      "id": "naresh-tikader",
+      "name": "Naresh Tikader",
+      "title": "Software Engineering Technical Leader",
+      "company": "",
+      "linkedin": "https://www.linkedin.com/in/naresh-tikader-a10105106/",
+      "date": "July 9, 2025",
+      "relationship": "Naresh was senior to Akash but didn't manage Akash directly",
+      "text": "It was an pleasure to work with Akash, whose dedication and hunger for learning left a lasting impact. Akash consistently demonstrated a strong work ethic, exceptional problem-solving skills, and a collaborative spirit that elevated our team's performance. His ability to tackle challenges with creativity and precision makes him an invaluable asset. I wholeheartedly recommend Akash for any role where innovation and reliability are key.",
+      "image": "/testimonials/naresh.jpg"
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import DeskSetup from "./DeskSetup";
 import FloatingParticles from "./FloatingParticles";
+import WebGLContextSafety from "@/components/3d/WebGLContextSafety";
 
 /*
   Camera setup: R3F orthographic canvas puts camera at [0,0,5] looking at origin.
@@ -106,11 +107,19 @@ export default function IsometricRoom() {
         orthographic
         dpr={[1, 1.5]}
         camera={{ position: [10, 12, 10], zoom: 52, near: 0.1, far: 300 }}
-        gl={{ antialias: true, alpha: true }}
+        gl={{
+          antialias: true,
+          alpha: true,
+          depth: true,
+          stencil: false,
+          preserveDrawingBuffer: false,
+          powerPreference: "default",
+        }}
         style={{ background: "transparent" }}
       >
         <CameraSetup />
         <Suspense fallback={null}>
+          <WebGLContextSafety maxDpr={1.5} clearAlpha={0} />
           <Scene />
         </Suspense>
       </Canvas>

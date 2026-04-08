@@ -90,6 +90,13 @@ export const careerTimeline = [
   },
 ] as const;
 
+/**
+ * Pre-combined Cisco dates for chat / consistency (LLMs often mis-add month spans).
+ * Intern Jan–Jun 2023 (6 mo) + gap Jul 2023 + FTE Aug 2023–Jul 2025 (23 mo) = 29 mo total.
+ */
+export const ciscoCombinedTenureSummary =
+  "Akash worked at Cisco in two separate roles with no overlap: (1) Technical Undergraduate Intern, Jan 2023 – Jun 2023 — 6 months. (2) Technical Consulting Engineer, Aug 2023 – Jul 2025 — 23 months. July 2023 is not listed as Cisco employment between those roles. Combined time at Cisco: 6 + 23 = 29 months (~2 years and 5 months).";
+
 export const experiences = [
   {
     role: "Technical Consulting Engineer",
@@ -450,18 +457,23 @@ export const skillCategories = [
   }
 ];
 
-export const certifications = [
-  "Generative AI Blue Belt - Cisco",
-  "DevNet - Cisco",
-  "CCNA - Cisco",
-];
-
-export const navSections = [
+/** Desktop top row (before “More” ▾). */
+export const navPrimaryDesktop = [
   "about",
   "experience",
   "projects",
   "skills",
+] as const;
+
+/** Desktop “More” dropdown — same order as mobile list after Skills. */
+export const navMoreDropdown = [
   "terminal",
+  "certifications",
+  "testimonials",
+  "honors",
   "contact",
 ] as const;
+
+/** Full page section order (scroll spy, mobile hamburger). */
+export const navSections = [...navPrimaryDesktop, ...navMoreDropdown] as const;
 export type NavSection = (typeof navSections)[number];

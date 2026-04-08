@@ -12,82 +12,15 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Stars, Billboard, Grid, MeshDistortMaterial, Sparkles, Html } from "@react-three/drei";
+import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
+import { Stars, Grid, MeshDistortMaterial, Sparkles, Html } from "@react-three/drei";
 import * as THREE from "three";
 import { personal } from "@/lib/data";
 import { useClientOnly } from "@/lib/useClientOnly";
+import WebGLContextSafety from "@/components/3d/WebGLContextSafety";
 
 function nav(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-}
-
-/** Retina-scale canvas labels so billboards stay sharp (no blurry 12px textures). */
-function makeLabelTex(text: string, fg: string): THREE.CanvasTexture {
-  const padX = 18;
-  const logicalH = 36;
-  const fontSize = 14;
-  const charW = 8.4;
-  const logicalW = Math.min(
-    168,
-    Math.max(88, Math.ceil(text.length * charW) + padX * 2)
-  );
-
-  const pr =
-    typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio || 2) : 2;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(2, Math.floor(logicalW * pr));
-  canvas.height = Math.max(2, Math.floor(logicalH * pr));
-  const ctx = canvas.getContext("2d", { alpha: true })!;
-  ctx.setTransform(pr, 0, 0, pr, 0, 0);
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-
-  const w = logicalW;
-  const h = logicalH;
-  const r = 10;
-
-  const bg = ctx.createLinearGradient(0, 0, w, h);
-  bg.addColorStop(0, "rgba(5,13,26,0.96)");
-  bg.addColorStop(1, "rgba(10,22,40,0.94)");
-  ctx.fillStyle = bg;
-  ctx.beginPath();
-  ctx.moveTo(r, 0);
-  ctx.lineTo(w - r, 0);
-  ctx.quadraticCurveTo(w, 0, w, r);
-  ctx.lineTo(w, h - r);
-  ctx.quadraticCurveTo(w, h, w - r, h);
-  ctx.lineTo(r, h);
-  ctx.quadraticCurveTo(0, h, 0, h - r);
-  ctx.lineTo(0, r);
-  ctx.quadraticCurveTo(0, 0, r, 0);
-  ctx.closePath();
-  ctx.fill();
-
-  const border = ctx.createLinearGradient(0, 0, w, 0);
-  border.addColorStop(0, "rgba(0,212,255,0.6)");
-  border.addColorStop(0.5, "rgba(14,165,233,0.42)");
-  border.addColorStop(1, "rgba(129,140,248,0.5)");
-  ctx.strokeStyle = border;
-  ctx.lineWidth = 1.35;
-  ctx.stroke();
-
-  ctx.fillStyle = fg;
-  ctx.font = `600 ${fontSize}px ui-sans-serif, system-ui, "Segoe UI", sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const midY = Math.round((h / 2) * 10) / 10;
-  ctx.fillText(text, w / 2, midY);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.generateMipmaps = false;
-  tex.minFilter = THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.anisotropy = 8;
-  return tex;
 }
 
 type ArtifactAction =
@@ -185,187 +118,94 @@ function OrbitalPath({ radius, tilt = 0 }: { radius: number; tilt?: number }) {
   );
 }
 
-// ── Section nodes (portfolio nav) ───────────────────────────────────────────
+// ── Single orbital ring: secondary nav (labels on hover / 2nd tap on touch) ─
 const TAU = Math.PI * 2;
-const SECTION_NODES = [
-  { id: "projects", label: "Projects", color: "#00d4ff", angle: (TAU * 0) / 5, yOff: 0.22 },
-  { id: "skills", label: "Skills", color: "#38bdf8", angle: (TAU * 1) / 5, yOff: -0.28 },
-  { id: "experience", label: "Experience", color: "#7dd3fc", angle: (TAU * 2) / 5, yOff: 0.35 },
-  { id: "terminal", label: "Terminal", color: "#a78bfa", angle: (TAU * 3) / 5, yOff: -0.2 },
-  { id: "contact", label: "Contact", color: "#0ea5e9", angle: (TAU * 4) / 5, yOff: -0.16 },
-] as const;
+const INNER_ORBIT_DECOR_R = 1.52;
+const ORBIT_R = 2.62;
 
-const SECTION_R = 1.52;
+type OrbitFigure = "torusKnot" | "lattice" | "stack" | "beacon" | "fork" | "prism";
 
-type SectionNodeProps = (typeof SECTION_NODES)[number] & {
-  hoverKey: string;
-  orbitHover: string | null;
-  setOrbitHover: Dispatch<SetStateAction<string | null>>;
-};
-
-function SectionNode({
-  id,
-  label,
-  color,
-  angle,
-  yOff,
-  hoverKey,
-  orbitHover,
-  setOrbitHover,
-}: SectionNodeProps) {
-  const x = Math.cos(angle) * SECTION_R;
-  const z = Math.sin(angle) * SECTION_R;
-
-  const meshRef = useRef<THREE.Mesh>(null);
-  const haloRef = useRef<THREE.Mesh>(null);
-  const ringRef = useRef<THREE.Mesh>(null);
-  const labelMatRef = useRef<THREE.MeshBasicMaterial>(null);
-  const hovered = orbitHover === hoverKey;
-
-  const labelTex = useMemo(() => makeLabelTex(label, "#e8f8ff"), [label]);
-  useEffect(() => () => labelTex.dispose(), [labelTex]);
-
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
-    if (!meshRef.current) return;
-    const mat = meshRef.current.material as THREE.MeshStandardMaterial;
-    const target = hovered ? 2.8 : 0.55 + Math.sin(t * 2.1 + angle) * 0.28;
-    mat.emissiveIntensity += (target - mat.emissiveIntensity) * 0.14;
-    const sc = hovered ? 1.22 : 1.0;
-    meshRef.current.scale.setScalar(
-      meshRef.current.scale.x + (sc - meshRef.current.scale.x) * 0.12
-    );
-    if (haloRef.current) {
-      const hm = haloRef.current.material as THREE.MeshBasicMaterial;
-      hm.opacity += ((hovered ? 0.22 : 0.05) - hm.opacity) * 0.1;
-    }
-    if (ringRef.current) {
-      ringRef.current.rotation.z = t * (hovered ? 2.2 : 0.9);
-    }
-    if (labelMatRef.current) {
-      const targetOp = hovered ? 1 : 0;
-      labelMatRef.current.opacity += (targetOp - labelMatRef.current.opacity) * 0.16;
-    }
-  });
-
-  return (
-    <group position={[x, yOff, z]}>
-      {/* Large invisible hit target so hover persists over the floating label */}
-      <mesh
-        onClick={(e) => {
-          e.stopPropagation();
-          nav(id);
-        }}
-        onPointerOver={() => setOrbitHover(hoverKey)}
-        onPointerOut={() => setOrbitHover((prev) => (prev === hoverKey ? null : prev))}
-        onPointerDown={(e) => {
-          /* Touch has no hover — show label on tap before click/navigation */
-          if (e.pointerType === "touch") setOrbitHover(hoverKey);
-        }}
-      >
-        <sphereGeometry args={[0.62, 20, 20]} />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-      </mesh>
-      <mesh ref={haloRef}>
-        <sphereGeometry args={[0.2, 14, 14]} />
-        <meshBasicMaterial color={color} transparent opacity={0.05} depthWrite={false} />
-      </mesh>
-      <mesh ref={meshRef}>
-        <icosahedronGeometry args={[0.11, 0]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={color}
-          emissiveIntensity={0.65}
-          roughness={0.12}
-          metalness={0.92}
-          flatShading
-        />
-      </mesh>
-      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.2, 0.006, 6, 28]} />
-        <meshBasicMaterial color={color} transparent opacity={hovered ? 0.75 : 0.28} />
-      </mesh>
-      <Billboard position={[0, 0.34, 0]}>
-        <mesh raycast={() => {}}>
-          <planeGeometry args={[0.92, 0.22]} />
-          <meshBasicMaterial
-            ref={labelMatRef}
-            map={labelTex}
-            transparent
-            opacity={0}
-            depthWrite={false}
-            side={THREE.DoubleSide}
-            toneMapped={false}
-          />
-        </mesh>
-      </Billboard>
-    </group>
-  );
-}
-
-// ── Clickable artifact figures (no skill labels — pure 3D + tooltips) ───────
-const ARTIFACT_OUTER_R = 2.62;
-
-const ARTIFACTS = [
+const ORBIT_NAV_ITEMS = [
   {
-    id: "artifact-knot",
-    angle: (Math.PI * 2 * 0) / 6 + 0.12,
-    r: ARTIFACT_OUTER_R,
-    y: 0.52,
-    color: "#00d4ff",
-    hoverLabel: "Projects",
-    action: { kind: "section" as const, id: "projects" },
-    figure: "torusKnot" as const,
-  },
-  {
-    id: "artifact-lattice",
-    angle: (Math.PI * 2 * 1) / 6 + 0.12,
-    r: ARTIFACT_OUTER_R,
-    y: -0.46,
-    color: "#38bdf8",
-    hoverLabel: "Skills",
-    action: { kind: "section" as const, id: "skills" },
-    figure: "lattice" as const,
-  },
-  {
-    id: "artifact-stack",
-    angle: (Math.PI * 2 * 2) / 6 + 0.12,
-    r: ARTIFACT_OUTER_R,
-    y: 0.58,
-    color: "#7dd3fc",
-    hoverLabel: "Experience",
+    key: "orbit-experience",
+    label: "Experience",
     action: { kind: "section" as const, id: "experience" },
+    color: "#7dd3fc",
+    y: 0.38,
     figure: "stack" as const,
+    angle: (TAU * 0) / 9 + 0.08,
   },
   {
-    id: "artifact-beacon",
-    angle: (Math.PI * 2 * 3) / 6 + 0.12,
-    r: ARTIFACT_OUTER_R,
-    y: -0.5,
-    color: "#0ea5e9",
-    hoverLabel: "Contact",
-    action: { kind: "section" as const, id: "contact" },
-    figure: "beacon" as const,
+    key: "orbit-projects",
+    label: "Projects",
+    action: { kind: "section" as const, id: "projects" },
+    color: "#00d4ff",
+    y: -0.32,
+    figure: "torusKnot" as const,
+    angle: (TAU * 1) / 9 + 0.08,
   },
   {
-    id: "artifact-fork",
-    angle: (Math.PI * 2 * 4) / 6 + 0.12,
-    r: ARTIFACT_OUTER_R,
-    y: 0.4,
+    key: "orbit-skills",
+    label: "Skills",
+    action: { kind: "section" as const, id: "skills" },
+    color: "#38bdf8",
+    y: 0.44,
+    figure: "lattice" as const,
+    angle: (TAU * 2) / 9 + 0.08,
+  },
+  {
+    key: "orbit-terminal",
+    label: "Terminal",
+    action: { kind: "section" as const, id: "terminal" },
     color: "#a78bfa",
-    hoverLabel: "GitHub",
-    action: { kind: "external" as const, url: personal.github },
-    figure: "fork" as const,
+    y: -0.4,
+    figure: "beacon" as const,
+    angle: (TAU * 3) / 9 + 0.08,
   },
   {
-    id: "artifact-prism",
-    angle: (Math.PI * 2 * 5) / 6 + 0.12,
-    r: ARTIFACT_OUTER_R,
-    y: -0.42,
-    color: "#60a5fa",
-    hoverLabel: "LinkedIn",
-    action: { kind: "external" as const, url: personal.linkedin },
+    key: "orbit-certifications",
+    label: "Certifications",
+    action: { kind: "section" as const, id: "certifications" },
+    color: "#22d3ee",
+    y: 0.36,
     figure: "prism" as const,
+    angle: (TAU * 4) / 9 + 0.08,
+  },
+  {
+    key: "orbit-testimonials",
+    label: "Testimonials",
+    action: { kind: "section" as const, id: "testimonials" },
+    color: "#67e8f9",
+    y: -0.36,
+    figure: "stack" as const,
+    angle: (TAU * 5) / 9 + 0.08,
+  },
+  {
+    key: "orbit-honors",
+    label: "Honors",
+    action: { kind: "section" as const, id: "honors" },
+    color: "#c4b5fd",
+    y: 0.4,
+    figure: "torusKnot" as const,
+    angle: (TAU * 6) / 9 + 0.08,
+  },
+  {
+    key: "orbit-github",
+    label: "GitHub",
+    action: { kind: "external" as const, url: personal.github },
+    color: "#94a3b8",
+    y: -0.38,
+    figure: "fork" as const,
+    angle: (TAU * 7) / 9 + 0.08,
+  },
+  {
+    key: "orbit-linkedin",
+    label: "LinkedIn",
+    action: { kind: "external" as const, url: personal.linkedin },
+    color: "#60a5fa",
+    y: 0.34,
+    figure: "prism" as const,
+    angle: (TAU * 8) / 9 + 0.08,
   },
 ] as const;
 
@@ -374,7 +214,7 @@ function ArtifactFigureVisual({
   color,
   spinRef,
 }: {
-  figure: (typeof ARTIFACTS)[number]["figure"];
+  figure: OrbitFigure;
   color: string;
   spinRef: RefObject<THREE.Group | null>;
 }) {
@@ -489,7 +329,7 @@ function ArtifactFigureVisual({
   }
 }
 
-function InteractiveArtifact({
+function OrbitNavMarker({
   position,
   hoverLabel,
   action,
@@ -498,15 +338,17 @@ function InteractiveArtifact({
   hoverKey,
   orbitHover,
   setOrbitHover,
+  touchPrimedRef,
 }: {
   position: [number, number, number];
   hoverLabel: string;
   action: ArtifactAction;
   color: string;
-  figure: (typeof ARTIFACTS)[number]["figure"];
+  figure: OrbitFigure;
   hoverKey: string;
   orbitHover: string | null;
   setOrbitHover: Dispatch<SetStateAction<string | null>>;
+  touchPrimedRef: MutableRefObject<string | null>;
 }) {
   const hovered = orbitHover === hoverKey;
   const pulseRef = useRef(0);
@@ -525,7 +367,7 @@ function InteractiveArtifact({
       groupRef.current.scale.setScalar(THREE.MathUtils.clamp(s, 1, 1.25));
     }
     if (visualRef.current) {
-      const target = hovered ? 1.12 : 1;
+      const target = hovered ? 1.1 : 1;
       const cur = visualRef.current.scale.x;
       const next = cur + (target - cur) * 0.14;
       visualRef.current.scale.setScalar(next);
@@ -537,13 +379,28 @@ function InteractiveArtifact({
     runArtifactAction(action);
   };
 
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    const pe = e.nativeEvent as PointerEvent;
+    const isTouch = pe.pointerType === "touch" || pe.pointerType === "pen";
+    if (isTouch) {
+      setOrbitHover(hoverKey);
+      if (touchPrimedRef.current === hoverKey) {
+        touchPrimedRef.current = null;
+        onActivate();
+      } else {
+        touchPrimedRef.current = hoverKey;
+      }
+      return;
+    }
+    touchPrimedRef.current = null;
+    onActivate();
+  };
+
   return (
     <group ref={groupRef} position={position}>
       <mesh
-        onClick={(e) => {
-          e.stopPropagation();
-          onActivate();
-        }}
+        onClick={(e) => handleClick(e)}
         onPointerOver={() => setOrbitHover(hoverKey)}
         onPointerOut={() => setOrbitHover((prev) => (prev === hoverKey ? null : prev))}
         onPointerDown={(e) => {
@@ -563,16 +420,14 @@ function InteractiveArtifact({
         center
         distanceFactor={7.2}
         style={{
-          pointerEvents: hovered ? "auto" : "none",
+          pointerEvents: "none",
           WebkitFontSmoothing: "antialiased",
           MozOsxFontSmoothing: "grayscale",
           textRendering: "optimizeLegibility",
         }}
       >
         <div
-          role="presentation"
-          onPointerEnter={() => setOrbitHover(hoverKey)}
-          onPointerLeave={() => setOrbitHover((prev) => (prev === hoverKey ? null : prev))}
+          aria-hidden
           style={{
             whiteSpace: "nowrap",
             padding: "10px 18px",
@@ -590,7 +445,7 @@ function InteractiveArtifact({
             transform: "translateZ(0)",
             backfaceVisibility: "hidden",
             opacity: hovered ? 1 : 0,
-            transition: "opacity 0.22s ease",
+            transition: "opacity 0.28s ease",
           }}
         >
           {hoverLabel}
@@ -600,39 +455,15 @@ function InteractiveArtifact({
   );
 }
 
-// ── Data-flow lines ─────────────────────────────────────────────────────────
+// ── Data-flow lines (nucleus → each orbit marker) ───────────────────────────
 function ConnectionLines() {
-  const innerGeom = useMemo(() => {
+  const geom = useMemo(() => {
     const pts: number[] = [];
-    SECTION_NODES.forEach((n) => {
+    ORBIT_NAV_ITEMS.forEach((n) => {
+      const x = Math.cos(n.angle) * ORBIT_R;
+      const z = Math.sin(n.angle) * ORBIT_R;
       pts.push(0, 0, 0);
-      pts.push(Math.cos(n.angle) * SECTION_R, n.yOff, Math.sin(n.angle) * SECTION_R);
-    });
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-    return g;
-  }, []);
-
-  const outerGeom = useMemo(() => {
-    const pts: number[] = [];
-    ARTIFACTS.forEach((a) => {
-      const tx = Math.cos(a.angle) * a.r;
-      const tz = Math.sin(a.angle) * a.r;
-      let minDist = Infinity;
-      let nearestAngle = 0;
-      let nearestY = 0;
-      SECTION_NODES.forEach((s) => {
-        const sx = Math.cos(s.angle) * SECTION_R;
-        const sz = Math.sin(s.angle) * SECTION_R;
-        const d = Math.hypot(tx - sx, tz - sz);
-        if (d < minDist) {
-          minDist = d;
-          nearestAngle = s.angle;
-          nearestY = s.yOff;
-        }
-      });
-      pts.push(Math.cos(nearestAngle) * SECTION_R, nearestY, Math.sin(nearestAngle) * SECTION_R);
-      pts.push(tx, a.y, tz);
+      pts.push(x, n.y, z);
     });
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
@@ -640,49 +471,30 @@ function ConnectionLines() {
   }, []);
 
   useEffect(() => {
-    return () => {
-      innerGeom.dispose();
-      outerGeom.dispose();
-    };
-  }, [innerGeom, outerGeom]);
+    return () => geom.dispose();
+  }, [geom]);
 
-  const innerMat = useRef<THREE.LineBasicMaterial>(null);
-  const outerMat = useRef<THREE.LineBasicMaterial>(null);
+  const lineMat = useRef<THREE.LineBasicMaterial>(null);
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
     const pulse = 0.55 + Math.sin(t * 1.85) * 0.45;
-    if (innerMat.current) {
-      innerMat.current.opacity = 0.14 + pulse * 0.1;
-    }
-    if (outerMat.current) {
-      outerMat.current.opacity = 0.05 + pulse * 0.055;
+    if (lineMat.current) {
+      lineMat.current.opacity = 0.08 + pulse * 0.08;
     }
   });
 
   return (
-    <group>
-      <lineSegments geometry={innerGeom}>
-        <lineBasicMaterial
-          ref={innerMat}
-          color="#7dd3fc"
-          transparent
-          opacity={0.2}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </lineSegments>
-      <lineSegments geometry={outerGeom}>
-        <lineBasicMaterial
-          ref={outerMat}
-          color="#00d4ff"
-          transparent
-          opacity={0.09}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </lineSegments>
-    </group>
+    <lineSegments geometry={geom}>
+      <lineBasicMaterial
+        ref={lineMat}
+        color="#7dd3fc"
+        transparent
+        opacity={0.14}
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+      />
+    </lineSegments>
   );
 }
 
@@ -727,8 +539,9 @@ function ConstellationGroup({
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const parallax = useRef({ x: 0, y: 0 });
-  /** Single hover target across inner section nodes + outer artifacts (avoids duplicate labels, e.g. two "Experience"). */
   const [orbitHover, setOrbitHover] = useState<string | null>(null);
+  /** First tap shows label; second tap on same icon navigates (touch / pen). */
+  const touchPrimedRef = useRef<string | null>(null);
 
   useEffect(() => {
     document.body.style.cursor = orbitHover ? "pointer" : "auto";
@@ -753,31 +566,23 @@ function ConstellationGroup({
   return (
     <group ref={groupRef} position={groupPosition}>
       <NucleusCore />
-      <OrbitalPath radius={SECTION_R} tilt={0.08} />
-      <OrbitalPath radius={ARTIFACT_OUTER_R} tilt={-0.06} />
-      {SECTION_NODES.map((n) => (
-        <SectionNode
-          key={n.id}
-          {...n}
-          hoverKey={`section:${n.id}`}
-          orbitHover={orbitHover}
-          setOrbitHover={setOrbitHover}
-        />
-      ))}
-      {ARTIFACTS.map((a) => {
-        const x = Math.cos(a.angle) * a.r;
-        const z = Math.sin(a.angle) * a.r;
+      <OrbitalPath radius={INNER_ORBIT_DECOR_R} tilt={0.08} />
+      <OrbitalPath radius={ORBIT_R} tilt={-0.06} />
+      {ORBIT_NAV_ITEMS.map((item) => {
+        const x = Math.cos(item.angle) * ORBIT_R;
+        const z = Math.sin(item.angle) * ORBIT_R;
         return (
-          <InteractiveArtifact
-            key={a.id}
-            position={[x, a.y, z]}
-            hoverLabel={a.hoverLabel}
-            action={a.action}
-            color={a.color}
-            figure={a.figure}
-            hoverKey={`artifact:${a.id}`}
+          <OrbitNavMarker
+            key={item.key}
+            position={[x, item.y, z]}
+            hoverLabel={item.label}
+            action={item.action}
+            color={item.color}
+            figure={item.figure}
+            hoverKey={item.key}
             orbitHover={orbitHover}
             setOrbitHover={setOrbitHover}
+            touchPrimedRef={touchPrimedRef}
           />
         );
       })}
@@ -938,7 +743,10 @@ function TechSphere({ variant = "hero" }: TechSphereProps) {
         gl={{
           antialias: !lowPower,
           alpha: true,
-          powerPreference: "default",
+          depth: true,
+          stencil: false,
+          preserveDrawingBuffer: false,
+          powerPreference: lowPower ? "low-power" : "default",
         }}
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
@@ -948,6 +756,7 @@ function TechSphere({ variant = "hero" }: TechSphereProps) {
         dpr={[1, maxDpr]}
       >
         <Suspense fallback={null}>
+          <WebGLContextSafety maxDpr={maxDpr} clearAlpha={0} acesToneMapping />
           <Scene constellationOffset={constellationOffset} lowPower={lowPower} />
         </Suspense>
       </Canvas>

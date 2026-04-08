@@ -53,7 +53,9 @@ export default function FloatingParticles() {
   }, [positions]);
 
   useEffect(() => {
-    return () => geometry.dispose();
+    return () => {
+      geometry.dispose();
+    };
   }, [geometry]);
 
   return (

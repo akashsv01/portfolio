@@ -9,6 +9,9 @@ import CareerTimeline from "@/components/sections/CareerTimeline";
 import Projects from "@/components/sections/Projects";
 import Skills from "@/components/sections/Skills";
 import TerminalSection from "@/components/sections/TerminalSection";
+import Certifications from "@/components/sections/Certifications";
+import Testimonials from "@/components/sections/Testimonials";
+import HonorsAwards from "@/components/sections/HonorsAwards";
 import Contact from "@/components/sections/Contact";
 import Footer from "@/components/Footer";
 import { navSections } from "@/lib/data";
@@ -17,6 +20,8 @@ const ConstellationBG = dynamic(
   () => import("@/components/ui/ConstellationBG"),
   { ssr: false }
 );
+
+import PortfolioChat from "@/components/chat/PortfolioChat";
 
 export default function Home() {
   const [active, setActive] = useState<string>("home");
@@ -70,8 +75,12 @@ export default function Home() {
       <Projects />
       <Skills />
       <TerminalSection />
+      <Certifications />
+      <Testimonials />
+      <HonorsAwards />
       <Contact />
       <Footer />
+      <PortfolioChat />
     </main>
   );
 }

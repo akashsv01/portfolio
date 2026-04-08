@@ -37,6 +37,12 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Local GCP keys — never commit
+.secrets/
+*-service-account*.json
+gcp-*.json
+!gcp-*.example.json
+
 # vercel
 .vercel
 

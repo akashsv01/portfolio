@@ -1,15 +1,76 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { navSections } from "@/lib/data";
+import type { CSSProperties } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  navPrimaryDesktop,
+  navMoreDropdown,
+  navSections,
+} from "@/lib/data";
 
 interface NavbarProps {
   active: string;
 }
 
+function sectionLabel(id: string): string {
+  return id.charAt(0).toUpperCase() + id.slice(1);
+}
+
+function ChevronDown({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 12 12"
+      fill="none"
+      aria-hidden
+      style={{
+        display: "inline-block",
+        verticalAlign: "middle",
+        marginLeft: 5,
+        transform: open ? "rotate(180deg)" : "rotate(0deg)",
+        transition: "transform 0.25s ease",
+        opacity: 0.85,
+      }}
+    >
+      <path
+        d="M2.5 4.25L6 7.75L9.5 4.25"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export default function Navbar({ active }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreWrapRef = useRef<HTMLDivElement>(null);
+  const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearLeaveTimer = useCallback(() => {
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
+  }, []);
+
+  const openMore = useCallback(() => {
+    clearLeaveTimer();
+    setMoreOpen(true);
+  }, [clearLeaveTimer]);
+
+  const scheduleCloseMore = useCallback(() => {
+    clearLeaveTimer();
+    leaveTimerRef.current = setTimeout(() => {
+      setMoreOpen(false);
+      leaveTimerRef.current = null;
+    }, 200);
+  }, [clearLeaveTimer]);
 
   useEffect(() => {
     const h = () => setScrolled(window.scrollY > 60);
@@ -25,6 +86,55 @@ export default function Navbar({ active }: NavbarProps) {
       document.body.style.overflow = prev;
     };
   }, [mobileOpen]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const el = moreWrapRef.current;
+      if (el && !el.contains(e.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [moreOpen]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMoreOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [moreOpen]);
+
+  const moreActive = navMoreDropdown.some((id) => active === id);
+
+  const desktopLinkStyle = (isActive: boolean): CSSProperties => ({
+    fontFamily: "var(--font-dm-sans), sans-serif",
+    fontSize: 12,
+    fontWeight: 500,
+    textTransform: "uppercase",
+    letterSpacing: "1.5px",
+    color: isActive ? "var(--accent)" : "var(--muted)",
+    textDecoration: "none",
+    transition: "color 0.3s",
+    position: "relative",
+  });
+
+  const activeDot = (
+    <span
+      style={{
+        position: "absolute",
+        bottom: -8,
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: 4,
+        height: 4,
+        borderRadius: "50%",
+        background: "var(--accent)",
+        boxShadow: "0 0 8px var(--accent)",
+      }}
+    />
+  );
 
   return (
     <nav
@@ -46,6 +156,7 @@ export default function Navbar({ active }: NavbarProps) {
           ? "1px solid rgba(0, 212, 255, 0.08)"
           : "1px solid transparent",
         transition: "all 0.4s ease",
+        overflow: "visible",
       }}
     >
       <div
@@ -56,9 +167,9 @@ export default function Navbar({ active }: NavbarProps) {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          overflow: "visible",
         }}
       >
-        {/* Logo */}
         <a
           href="#home"
           style={{
@@ -85,45 +196,112 @@ export default function Navbar({ active }: NavbarProps) {
           />
         </a>
 
-        {/* Desktop nav */}
         <div
           className="hide-mobile"
-          style={{ display: "flex", gap: 32, alignItems: "center" }}
+          style={{ display: "flex", gap: 28, alignItems: "center", overflow: "visible" }}
         >
-          {navSections.map((s) => (
-            <a
-              key={s}
-              href={`#${s}`}
+          {navPrimaryDesktop.map((s) => (
+            <a key={s} href={`#${s}`} style={desktopLinkStyle(active === s)}>
+              {sectionLabel(s)}
+              {active === s && activeDot}
+            </a>
+          ))}
+
+          <div
+            ref={moreWrapRef}
+            style={{ position: "relative", overflow: "visible" }}
+            onMouseEnter={openMore}
+            onMouseLeave={scheduleCloseMore}
+          >
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              aria-controls="nav-more-menu"
+              onClick={() => setMoreOpen((v) => !v)}
               style={{
+                ...desktopLinkStyle(moreActive || moreOpen),
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+                display: "inline-flex",
+                alignItems: "center",
                 fontFamily: "var(--font-dm-sans), sans-serif",
                 fontSize: 12,
                 fontWeight: 500,
+                fontStyle: "normal",
                 textTransform: "uppercase",
                 letterSpacing: "1.5px",
-                color: active === s ? "var(--accent)" : "var(--muted)",
-                textDecoration: "none",
-                transition: "color 0.3s",
-                position: "relative",
               }}
             >
-              {s.charAt(0).toUpperCase() + s.slice(1)}
-              {active === s && (
-                <span
+              More
+              <ChevronDown open={moreOpen} />
+              {(moreActive || moreOpen) && activeDot}
+            </button>
+
+            <AnimatePresence>
+              {moreOpen && (
+                <motion.div
+                  id="nav-more-menu"
+                  role="menu"
+                  aria-orientation="vertical"
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
                   style={{
                     position: "absolute",
-                    bottom: -8,
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    width: 4,
-                    height: 4,
-                    borderRadius: "50%",
-                    background: "var(--accent)",
-                    boxShadow: "0 0 8px var(--accent)",
+                    top: "100%",
+                    right: 0,
+                    minWidth: 220,
+                    padding: "10px 0 8px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(0, 212, 255, 0.14)",
+                    background: "rgba(8, 18, 32, 0.92)",
+                    backdropFilter: "blur(16px) saturate(1.4)",
+                    WebkitBackdropFilter: "blur(16px) saturate(1.4)",
+                    boxShadow:
+                      "0 16px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04)",
+                    zIndex: 200,
                   }}
-                />
+                >
+                  {navMoreDropdown.map((s) => (
+                    <a
+                      key={s}
+                      role="menuitem"
+                      href={`#${s}`}
+                      onClick={() => setMoreOpen(false)}
+                      style={{
+                        display: "block",
+                        fontFamily: "var(--font-dm-sans), sans-serif",
+                        fontSize: 12,
+                        fontWeight: 500,
+                        textTransform: "uppercase",
+                        letterSpacing: "1.5px",
+                        color: active === s ? "var(--accent)" : "var(--muted)",
+                        textDecoration: "none",
+                        padding: "11px 20px",
+                        transition: "color 0.2s ease, background 0.2s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = "var(--accent)";
+                        e.currentTarget.style.background = "rgba(0, 212, 255, 0.08)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color =
+                          active === s ? "var(--accent)" : "var(--muted)";
+                        e.currentTarget.style.background = "transparent";
+                      }}
+                    >
+                      {sectionLabel(s)}
+                    </a>
+                  ))}
+                </motion.div>
               )}
-            </a>
-          ))}
+            </AnimatePresence>
+          </div>
+
           <a
             href="/resume.pdf"
             target="_blank"
@@ -153,7 +331,6 @@ export default function Navbar({ active }: NavbarProps) {
           </a>
         </div>
 
-        {/* Mobile hamburger */}
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
@@ -188,8 +365,8 @@ export default function Navbar({ active }: NavbarProps) {
                   i === 0 && mobileOpen
                     ? "rotate(45deg) translateY(7px)"
                     : i === 2 && mobileOpen
-                    ? "rotate(-45deg) translateY(-7px)"
-                    : "none",
+                      ? "rotate(-45deg) translateY(-7px)"
+                      : "none",
                 opacity: i === 1 && mobileOpen ? 0 : 1,
               }}
             />
@@ -197,7 +374,6 @@ export default function Navbar({ active }: NavbarProps) {
         </button>
       </div>
 
-      {/* Mobile menu */}
       {mobileOpen && (
         <div
           style={{
@@ -233,13 +409,14 @@ export default function Navbar({ active }: NavbarProps) {
                 alignItems: "center",
               }}
             >
-              {s.charAt(0).toUpperCase() + s.slice(1)}
+              {sectionLabel(s)}
             </a>
           ))}
           <a
             href="/resume.pdf"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => setMobileOpen(false)}
             style={{
               fontFamily: "var(--font-dm-sans), sans-serif",
               fontSize: 14,
