@@ -219,6 +219,7 @@ export default function Navbar({ active }: NavbarProps) {
               aria-expanded={moreOpen}
               aria-controls="nav-more-menu"
               onClick={() => setMoreOpen((v) => !v)}
+              suppressHydrationWarning
               style={{
                 ...desktopLinkStyle(moreActive || moreOpen),
                 background: "none",
@@ -335,6 +336,7 @@ export default function Navbar({ active }: NavbarProps) {
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
           className="hide-desktop"
+          suppressHydrationWarning
           style={{
             background: "rgba(0, 212, 255, 0.06)",
             border: "1px solid rgba(0, 212, 255, 0.12)",

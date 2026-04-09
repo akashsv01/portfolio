@@ -12,12 +12,21 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
-import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
+import { Canvas, useFrame, invalidate, type ThreeEvent } from "@react-three/fiber";
 import { Stars, Grid, MeshDistortMaterial, Sparkles, Html } from "@react-three/drei";
 import * as THREE from "three";
 import { personal } from "@/lib/data";
 import { useClientOnly } from "@/lib/useClientOnly";
 import WebGLContextSafety from "@/components/3d/WebGLContextSafety";
+import { canCreateWebGLContext } from "@/lib/webglSupport";
+
+/** Nudge R3F to draw again when switching frameloop back from "never" to "always". */
+function ResumeRenderWhenVisible({ active }: { active: boolean }) {
+  useEffect(() => {
+    if (active) invalidate();
+  }, [active]);
+  return null;
+}
 
 function nav(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -687,14 +696,70 @@ function HeroSpinner() {
   );
 }
 
+/** CSS-only hero backdrop when WebGL cannot be created — fills the same box as Canvas. */
+function TechSphereWebGLFallback({ variant = "hero" }: { variant?: "hero" | "compact" }) {
+  const dim = variant === "hero" ? "72%" : "65%";
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        position: "relative",
+        overflow: "hidden",
+        background:
+          "radial-gradient(ellipse 80% 70% at 50% 45%, rgba(0,212,255,0.12) 0%, transparent 55%)",
+        pointerEvents: "none",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: dim,
+          height: dim,
+          transform: "translate(-50%, -50%)",
+          borderRadius: "50%",
+          background:
+            "conic-gradient(from 200deg, rgba(14,165,233,0.45), rgba(0,212,255,0.35), rgba(56,189,248,0.3), rgba(129,140,248,0.25), rgba(14,165,233,0.45))",
+          filter: "blur(42px)",
+          opacity: 0.85,
+          animation: "spin-slow 28s linear infinite",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: "38%",
+          height: "38%",
+          transform: "translate(-50%, -50%)",
+          borderRadius: "50%",
+          border: "1px solid rgba(0,212,255,0.12)",
+          boxShadow: "0 0 60px rgba(0,212,255,0.08)",
+          animation: "spin-slow 18s linear infinite reverse",
+        }}
+      />
+    </div>
+  );
+}
+
 export type TechSphereProps = {
   variant?: "hero" | "compact";
 };
 
 function TechSphere({ variant = "hero" }: TechSphereProps) {
   const mounted = useClientOnly();
+  const hostRef = useRef<HTMLDivElement>(null);
   const [tabHidden, setTabHidden] = useState(false);
+  const [heroInView, setHeroInView] = useState(true);
   const [viewportWidth, setViewportWidth] = useState(1280);
+
+  const webglSupported = useMemo(
+    () => (mounted ? canCreateWebGLContext() : true),
+    [mounted]
+  );
 
   useEffect(() => {
     const h = () => setTabHidden(document.hidden);
@@ -708,6 +773,20 @@ function TechSphere({ variant = "hero" }: TechSphereProps) {
     updateViewport();
     window.addEventListener("resize", updateViewport, { passive: true });
     return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const e = entries[0];
+        if (e) setHeroInView(e.isIntersecting);
+      },
+      { root: null, rootMargin: "80px 0px 80px 0px", threshold: 0 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
   }, []);
 
   const isHero = variant === "hero";
@@ -724,14 +803,26 @@ function TechSphere({ variant = "hero" }: TechSphereProps) {
 
   if (!mounted) return <HeroSpinner />;
 
-  const maxDpr = typeof window !== "undefined"
-    ? Math.min(lowPower ? 1.2 : 1.5, window.devicePixelRatio || 1.5)
-    : lowPower ? 1.2 : 1.5;
+  if (!webglSupported) {
+    return (
+      <div ref={hostRef} style={{ width: "100%", height: "100%", position: "relative" }}>
+        <TechSphereWebGLFallback variant={variant} />
+      </div>
+    );
+  }
+
+  const dprCap = 2;
+  const maxDpr =
+    typeof window !== "undefined"
+      ? Math.min(lowPower ? 1.2 : 1.5, Math.min(window.devicePixelRatio || 1, dprCap))
+      : Math.min(lowPower ? 1.2 : 1.5, dprCap);
+
+  const renderLoopActive = !tabHidden && heroInView;
 
   return (
-    <div style={{ width: "100%", height: "100%", position: "relative" }}>
+    <div ref={hostRef} style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas
-        frameloop={tabHidden ? "never" : "always"}
+        frameloop={renderLoopActive ? "always" : "never"}
         style={{
           position: "absolute",
           inset: 0,
@@ -756,6 +847,7 @@ function TechSphere({ variant = "hero" }: TechSphereProps) {
         dpr={[1, maxDpr]}
       >
         <Suspense fallback={null}>
+          <ResumeRenderWhenVisible active={renderLoopActive} />
           <WebGLContextSafety maxDpr={maxDpr} clearAlpha={0} acesToneMapping />
           <Scene constellationOffset={constellationOffset} lowPower={lowPower} />
         </Suspense>

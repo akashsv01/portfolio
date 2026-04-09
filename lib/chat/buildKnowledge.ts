@@ -83,9 +83,44 @@ export function buildKnowledgeChunksFromSite(): KnowledgeChunk[] {
   });
 
   chunks.push({
+    id: "hiring-availability",
+    label:
+      "hiring availability recruiting open to work internship job opportunities contact linkedin email",
+    text: [
+      "Purpose: Recruiter and employer intent — hiring, availability, internships, full-time, how to reach Akash.",
+      "",
+      `Stated availability on this portfolio: ${personal.status}`,
+      "Akash is pursuing his M.S. in Software Engineering at the University of Maryland, College Park, with coursework and research interests spanning software engineering and AI/ML.",
+      "",
+      "What he is targeting:",
+      "- Summer 2026 internships and software engineering roles (including full-time pipelines where relevant); strong fit for teams that care about production quality and AI/ML applied responsibly.",
+      "",
+      "Professional experience (summary for recruiters):",
+      "- Cisco — Technical Consulting Engineer: GenAI/RAG-style troubleshooting systems, automation ambassador work, Cisco IOS XR at large scale (see Experience chunks for responsibilities and metrics).",
+      "- Cisco — Technical Undergraduate Intern: automation and platform-oriented work; CCNA and Cisco DevNet certifications completed during the program.",
+      "- S&P Global — Software Engineering Intern: data pipeline / visualization and Angular dashboard work.",
+      "- Undergraduate: Gold Medalist and top graduate — Vasavi College of Engineering (details in timeline and honors).",
+      "",
+      "Strengths often relevant to employers: full-stack development, AI/ML engineering, cloud and data systems, networking platforms, and shipping reliable software under operational pressure.",
+      "",
+      "How to take the next step:",
+      `- Contact: use the Contact section on this site — email ${personal.email}.`,
+      `- LinkedIn: ${personal.linkedin}`,
+      `- Phone (if appropriate for your process): ${personal.phone}`,
+      "Outreach is welcome; treat this as an active search for the right opportunities.",
+    ].join("\n"),
+  });
+
+  chunks.push({
     id: "about",
     label: "About",
     text: aboutParagraphs.join("\n\n"),
+  });
+
+  chunks.push({
+    id: "education-gpa",
+    label: "GPA grades academic performance CGPA score university rank topper",
+    text: "Akash graduated as the Gold Medalist (University Rank 1) from Vasavi College of Engineering, Hyderabad with a 9.78 GPA in B.E. Computer Science & Engineering (2019-2023 batch). He is currently pursuing his M.S. in Software Engineering at the University of Maryland, College Park.",
   });
 
   for (const t of careerTimeline) {

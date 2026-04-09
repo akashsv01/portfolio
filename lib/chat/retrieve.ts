@@ -8,11 +8,95 @@ function unique<T>(arr: T[]): T[] {
   return [...new Set(arr)];
 }
 
+/** Generic repo slug tokens that match almost any "project" question — ignore for slug scoring. */
+const GENERIC_REPO_SLUG_PARTS = new Set([
+  "project",
+  "projects",
+  "app",
+  "apps",
+  "web",
+  "api",
+  "the",
+  "use",
+  "using",
+  "for",
+  "with",
+  "and",
+  "src",
+  "lib",
+  "demo",
+  "code",
+  "tool",
+  "tools",
+]);
+
+/** Avoid matching short slug tokens (e.g. "ai") as substrings of "akash". */
+function slugPartMatchesQuery(part: string, qLower: string): boolean {
+  if (part.length < 3 || GENERIC_REPO_SLUG_PARTS.has(part)) return false;
+  try {
+    return new RegExp(`\\b${part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(qLower);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hiring, recruiting, availability — warm-lead questions; pair with `hiring-availability` + profile chunks.
+ */
+export function isHiringRecruitingAvailabilityQuery(query: string): boolean {
+  const s = query.toLowerCase().trim();
+  if (
+    /\b(can|may)\s+i\s+hire\b|\bhiring\s+(him|akash)\b|\bhire\s+(him|akash)\b|\b(want|would\s+like|looking)\s+to\s+hire\b|\bto\s+hire\s+(him|akash)\b|\brecruit(?:ing)?\b|\brecruitment\b|\brecruiter\b|\bhow\s+to\s+(hire|recruit|contact|reach)\b|\bin hiring\b|\binterested\s+in\s+hiring\b/.test(
+      s
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(is\s+he\s+)?available\s+for\s+(work|hire|internships?|interns?|jobs?|roles?|employment)\b/.test(s)
+  ) {
+    return true;
+  }
+  if (
+    /\b(is\s+he\s+)?open\s+to\s+(work|opportunities?|roles?|internships?|offers?|employment)\b/.test(s)
+  ) {
+    return true;
+  }
+  if (
+    /\b(is\s+he\s+)?(looking|searching|seeking)\s+for\s+(a\s+)?(job|work|opportunities?|internships?|roles?|positions?|employment)\b/.test(
+      s
+    )
+  ) {
+    return true;
+  }
+  if (/\bemploy(?:er|ment)?\b/.test(s) && /\b(him|akash|he|his)\b/.test(s)) return true;
+  if (/\b(work\s+with\s+him|bring\s+him\s+on|get\s+him\s+on\s+board)\b/.test(s)) return true;
+  return false;
+}
+
 /**
  * Extra tokens merged into lexical scoring so paraphrases (e.g. "reviews" → testimonials)
  * still surface the right chunks. Does not replace the original query string for slug heuristics.
  */
 const RETRIEVAL_SYNONYM_RULES: { test: (q: string) => boolean; inject: string[] }[] = [
+  {
+    test: (q) => isHiringRecruitingAvailabilityQuery(q),
+    inject: [
+      "hiring",
+      "availability",
+      "recruiting",
+      "opportunities",
+      "internship",
+      "employment",
+      "contact",
+      "profile",
+      "linkedin",
+      "open",
+      "recruiter",
+      "job",
+      "email",
+    ],
+  },
   {
     test: (q) =>
       /\b(recommendations?|reviews?|feedback|references?|testimonials?)\b/.test(q) ||
@@ -45,12 +129,31 @@ const RETRIEVAL_SYNONYM_RULES: { test: (q: string) => boolean; inject: string[] 
   },
   {
     test: (q) =>
+      /\b(gpa|cgpa|grades?|academic\s+performance|score|rank|topper|marks)\b/i.test(q),
+    inject: [
+      "gpa",
+      "cgpa",
+      "grades",
+      "academic",
+      "performance",
+      "score",
+      "rank",
+      "topper",
+      "marks",
+      "education",
+      "vasavi",
+      "gold",
+    ],
+  },
+  {
+    test: (q) =>
       /\b(education|degree|university|college|masters?|bachelors?|school|graduated|student)\b/.test(q),
     inject: ["timeline", "masters", "bachelors", "maryland", "vasavi", "education"],
   },
   {
     test: (q) =>
-      /\b(contact|email|reach|hire|connect|phone|message|get\s+in\s+touch|linkedin)\b/.test(q),
+      /\b(contact|email|reach|hire|connect|phone|message|get\s+in\s+touch|linkedin)\b/.test(q) &&
+      !isHiringRecruitingAvailabilityQuery(q),
     inject: ["email", "profile", "phone", "location", "akashvora"],
   },
 ];
@@ -149,7 +252,11 @@ export function formatContextForPrompt(chunks: KnowledgeChunk[]): string {
 export function isCasualFeedbackOrThanks(query: string): boolean {
   const s = query.toLowerCase().trim();
   if (s.length > 220) return false;
-  if (/\b(akash|portfolio|project|repo|github|experience|intern|resume|skill|work|education|degree|umd|build|built|code)\b/.test(s)) {
+  if (
+    /\b(akash|portfolio|project|repo|github|experience|intern|resume|skill|work|education|degree|umd|build|built|code|hire|hiring|recruit|job|opportunities?|available|employment)\b/.test(
+      s
+    )
+  ) {
     return false;
   }
   if (
@@ -225,9 +332,65 @@ export function isExperienceCareerQuery(query: string): boolean {
   return false;
 }
 
+function testimonialsSocialProofMatch(s: string): boolean {
+  return (
+    /\bwhat\s+do\s+people\s+say\b|\bpeople\s+say\s+about\b|\babout\s+working\s+with\s+akash\b/.test(s)
+  );
+}
+
+/** Social proof / peer feedback — prioritize testimonial chunks, not certs first. */
+export function isTestimonialsSocialProofQuery(query: string): boolean {
+  return testimonialsSocialProofMatch(query.toLowerCase());
+}
+
+export function isCertificationsOnlyQuery(query: string): boolean {
+  const s = query.toLowerCase();
+  if (/\b(awards?|honou?rs?)\b/.test(s) && !/\bcertificat|credly|ccna|devnet|blue belt\b/.test(s)) {
+    return false;
+  }
+  return /\b(certificat|credly|ccna|devnet|blue belt|generative ai belt)\b/.test(s);
+}
+
+export function isHonorsOnlyQuery(query: string): boolean {
+  const s = query.toLowerCase();
+  if (/\b(certificat|credly|ccna|devnet)\b/.test(s)) return false;
+  return /\b(awards?|honou?rs?|gold medal|young leader|volunteer|csi\b|academic excellence)\b/.test(s);
+}
+
+/** Featured Projects section — not a specific named repo slug. */
+export function isFeaturedPortfolioProjectsOverviewQuery(query: string): boolean {
+  const s = query.toLowerCase();
+  if (/\b(traffic|signs|classifier|tell\s+me\s+about\s+his)\b/.test(s) && /\bproject\b/.test(s)) {
+    return false;
+  }
+  if (/\b(what|which)\s+projects\b/.test(s)) return true;
+  if (/\bprojects?\s+(has|have)\s+(he|akash)\s+(built|made)\b/.test(s)) return true;
+  if (/\b(his|akash'?s)\s+projects?\b/.test(s)) return true;
+  if (/\bwhat\s+.*\b(has|have)\s+akash\s+built\b/.test(s)) return true;
+  return false;
+}
+
+export function isSkillsTechStackQuery(query: string): boolean {
+  const s = query.toLowerCase();
+  return (
+    /\b(skills?|tech\s*stack|technologies|programming\s+languages)\b/.test(s) &&
+    /\b(akash|his|he)\b/.test(s)
+  );
+}
+
+/** Contact / reach — not already handled as hiring intent. */
+export function isContactReachOutQuery(query: string): boolean {
+  if (isHiringRecruitingAvailabilityQuery(query)) return false;
+  const s = query.toLowerCase();
+  return /\b(contact|email|reach|linkedin|phone|message|get\s+in\s+touch)\b/.test(s);
+}
+
 /** Testimonials, honors, licenses — force matching chunks so small topK still covers them. */
 export function isTestimonialsHonorsCertsQuery(query: string): boolean {
   const s = query.toLowerCase();
+  if (testimonialsSocialProofMatch(s)) {
+    return true;
+  }
   if (
     /\btestimonial|recommendations?|reviews?|feedback|references?|who (wrote|said|recommended)\b/.test(s)
   ) {
@@ -294,7 +457,7 @@ export function filterGithubRepoNoise(query: string, chunks: KnowledgeChunk[]): 
     const parts = slug.toLowerCase().split(/[-_]+/).filter((p) => p.length > 1);
     let score = 0;
     for (const p of parts) {
-      if (q.includes(p)) score += 2;
+      if (slugPartMatchesQuery(p, q)) score += 2;
     }
     if (score >= 2) keepIds.add(c.id);
   }
@@ -326,7 +489,7 @@ export function bestMatchingGithubRepoSlug(query: string, chunks: KnowledgeChunk
     const parts = slug.toLowerCase().split(/[-_]+/).filter((p) => p.length > 1);
     let score = 0;
     for (const p of parts) {
-      if (q.includes(p)) score += 2;
+      if (slugPartMatchesQuery(p, q)) score += 2;
     }
     if (score > (best?.score ?? 0)) best = { slug, score };
   }
@@ -346,11 +509,93 @@ export function pickChunksForQuery(
   const pool = filterGithubRepoNoise(query, chunks);
   const summary = pool.find((c) => c.id === "github-summary");
 
+  if (isHiringRecruitingAvailabilityQuery(query)) {
+    const hiringChunk = pool.find((c) => c.id === "hiring-availability");
+    const profileChunk = pool.find((c) => c.id === "profile");
+    const mastersTimeline = pool.find((c) => c.id === "timeline-masters");
+    const forced = [hiringChunk, profileChunk, mastersTimeline].filter(Boolean) as KnowledgeChunk[];
+    const forcedIds = new Set(forced.map((c) => c.id));
+    const rest = retrieveTopChunks(query, pool, topK, minScore).chunks.filter(
+      (c) => !forcedIds.has(c.id)
+    );
+    const cap = Math.max(topK, forced.length + 6);
+    return [...forced, ...rest].slice(0, cap);
+  }
+
+  if (isCertificationsOnlyQuery(query)) {
+    const certChunk = pool.find((c) => c.id === "certifications-licenses");
+    const profileChunk = pool.find((c) => c.id === "profile");
+    const overview = pool.find((c) => c.id === "portfolio-sections-overview");
+    const forced = [certChunk, profileChunk, overview].filter(Boolean) as KnowledgeChunk[];
+    const forcedIds = new Set(forced.map((c) => c.id));
+    const rest = retrieveTopChunks(query, pool, topK, minScore).chunks.filter(
+      (c) => !forcedIds.has(c.id)
+    );
+    const cap = Math.max(topK, forced.length + 4);
+    return [...forced, ...rest].slice(0, cap);
+  }
+
+  if (isHonorsOnlyQuery(query)) {
+    const honorsChunk = pool.find((c) => c.id === "honors-awards");
+    const overview = pool.find((c) => c.id === "portfolio-sections-overview");
+    const profileChunk = pool.find((c) => c.id === "profile");
+    const forced = [honorsChunk, overview, profileChunk].filter(Boolean) as KnowledgeChunk[];
+    const forcedIds = new Set(forced.map((c) => c.id));
+    const rest = retrieveTopChunks(query, pool, topK, minScore).chunks.filter(
+      (c) => !forcedIds.has(c.id)
+    );
+    const cap = Math.max(topK, forced.length + 4);
+    return [...forced, ...rest].slice(0, cap);
+  }
+
+  if (isSkillsTechStackQuery(query)) {
+    const overview = pool.find((c) => c.id === "skills-overview");
+    const categories = pool
+      .filter((c) => c.id.startsWith("skills-") && c.id !== "skills-overview")
+      .sort((a, b) => a.id.localeCompare(b.id));
+    const forced = [overview, ...categories].filter(Boolean) as KnowledgeChunk[];
+    const forcedIds = new Set(forced.map((c) => c.id));
+    const rest = retrieveTopChunks(query, pool, topK, minScore).chunks.filter(
+      (c) => !forcedIds.has(c.id)
+    );
+    const cap = Math.max(topK, forced.length + 4);
+    return [...forced, ...rest].slice(0, cap);
+  }
+
+  if (isContactReachOutQuery(query)) {
+    const profileChunk = pool.find((c) => c.id === "profile");
+    const overview = pool.find((c) => c.id === "portfolio-sections-overview");
+    const forced = [profileChunk, overview].filter(Boolean) as KnowledgeChunk[];
+    const forcedIds = new Set(forced.map((c) => c.id));
+    const rest = retrieveTopChunks(query, pool, topK, minScore).chunks.filter(
+      (c) =>
+        !forcedIds.has(c.id) &&
+        c.id !== "hiring-availability"
+    );
+    const cap = Math.max(topK, forced.length + 6);
+    return [...forced, ...rest].slice(0, cap);
+  }
+
+  if (isTestimonialsSocialProofQuery(query)) {
+    const testimonialChunks = pool
+      .filter((c) => c.id.startsWith("testimonial-"))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    const overview = pool.find((c) => c.id === "portfolio-sections-overview");
+    const profileChunk = pool.find((c) => c.id === "profile");
+    const forced = [...testimonialChunks, overview, profileChunk].filter(Boolean) as KnowledgeChunk[];
+    const forcedIds = new Set(forced.map((c) => c.id));
+    const rest = retrieveTopChunks(query, pool, topK, minScore).chunks.filter(
+      (c) => !forcedIds.has(c.id) && c.id !== "hiring-availability"
+    );
+    const cap = Math.max(topK, forced.length + 4);
+    return [...forced, ...rest].slice(0, cap);
+  }
+
   if (isTestimonialsHonorsCertsQuery(query)) {
     const testimonialChunks = pool.filter((c) => c.id.startsWith("testimonial-"));
     const certChunk = pool.find((c) => c.id === "certifications-licenses");
     const honorsChunk = pool.find((c) => c.id === "honors-awards");
-    const forced = [certChunk, honorsChunk, ...testimonialChunks].filter(Boolean) as KnowledgeChunk[];
+    const forced = [...testimonialChunks, certChunk, honorsChunk].filter(Boolean) as KnowledgeChunk[];
     const forcedIds = new Set(forced.map((c) => c.id));
     const rest = retrieveTopChunks(query, pool, topK, minScore).chunks.filter(
       (c) => !forcedIds.has(c.id)

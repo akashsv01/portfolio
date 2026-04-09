@@ -5,15 +5,16 @@ import {
   CHAT_MAX_MESSAGE_CHARS,
   CHAT_MAX_OUT_DEFAULT,
   CHAT_MAX_OUT_EXPERIENCE,
+  CHAT_MAX_OUT_HIRING,
   CHAT_MAX_OUT_IDENTITY,
   CHAT_MAX_OUT_README,
-  DEFAULT_GEMINI_MODEL,
+  DEFAULT_CHAT_MODEL,
   RAG_MIN_SCORE,
   RAG_TOP_K,
   SYSTEM_INSTRUCTION,
 } from "@/lib/chat/constants";
 import { getGithubReadmeCached } from "@/lib/chat/fetchGithubRepos";
-import { friendlyGeminiError } from "@/lib/chat/geminiErrors";
+import { friendlyLlmError } from "@/lib/chat/llmErrors";
 import { generateGeminiChatReply } from "@/lib/chat/geminiGenerate";
 import { githubUsernameFromProfile, loadAllKnowledgeChunks } from "@/lib/chat/loadKnowledge";
 import {
@@ -26,6 +27,8 @@ import {
   bestMatchingGithubRepoSlug,
   formatContextForPrompt,
   isExperienceCareerQuery,
+  isFeaturedPortfolioProjectsOverviewQuery,
+  isHiringRecruitingAvailabilityQuery,
   isIdentityQuery,
   pickChunksForQuery,
   wantsGithubReadmeContext,
@@ -57,8 +60,8 @@ function sanitizeMessages(raw: unknown): ChatMessage[] | null {
   return out;
 }
 
-function geminiModelId(): string {
-  return process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+function chatModelId(): string {
+  return process.env.GROQ_MODEL?.trim() || DEFAULT_CHAT_MODEL;
 }
 
 function shouldUseResponseCache(lastUserText: string): boolean {
@@ -66,12 +69,12 @@ function shouldUseResponseCache(lastUserText: string): boolean {
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const apiKey = process.env.GROQ_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json(
       {
         error:
-          "Chat is not configured. Set GEMINI_API_KEY in .env.local (Google AI Studio: https://aistudio.google.com/apikey). Server-only — never use NEXT_PUBLIC_*.",
+          "Chat is not configured. Set GROQ_API_KEY in .env.local (https://console.groq.com/keys). Server-only — never use NEXT_PUBLIC_*.",
       },
       { status: 503 }
     );
@@ -135,7 +138,12 @@ export async function POST(request: Request) {
 
   let top = pickChunksForQuery(lastUser.content, allChunks, RAG_TOP_K, RAG_MIN_SCORE);
   const matchedSlug = bestMatchingGithubRepoSlug(lastUser.content, allChunks);
-  if (matchedSlug && !isExperienceCareerQuery(lastUser.content)) {
+  if (
+    matchedSlug &&
+    !isExperienceCareerQuery(lastUser.content) &&
+    !isHiringRecruitingAvailabilityQuery(lastUser.content) &&
+    !isFeaturedPortfolioProjectsOverviewQuery(lastUser.content)
+  ) {
     const repoChunk = allChunks.find((c) => c.id === `github-repo-${matchedSlug}`);
     if (repoChunk) {
       const rest = top.filter((c) => c.id !== repoChunk.id);
@@ -166,8 +174,10 @@ export async function POST(request: Request) {
     historyText && `Prior conversation:\n${historyText}\n`,
     isIdentityQuery(lastUser.content) &&
       "This question is about who Akash is. Answer as a short bio: lead with his M.S. at UMD and focus areas; mention prior work only briefly. Do not lead with Cisco or list unrelated school repos.",
+    isHiringRecruitingAvailabilityQuery(lastUser.content) &&
+      "Recruiting / hiring / availability question — treat as a warm lead from a potential employer. Answer enthusiastically and informatively using hiring-availability and profile context: UMD M.S., stated goals (e.g. internships and SWE roles), Cisco and S&P highlights, strengths, Gold Medal / top graduate when in context. Make the next step obvious: Contact section on this page, LinkedIn, email. Do not sound generic, evasive, or like a dead-end fallback.",
     isExperienceCareerQuery(lastUser.content) &&
-      "Several work-experience sources are below — mention every role (company, title, period) in crisp bullets, not only one internship.",
+      "Several work-experience sources are below — mention every role (company, title, period) in crisp bullets, not only one internship. If Role/Company/Period/Highlights appear in the context, summarize them directly; do not say you lack details or tell the user to open the Experience section.",
     extraChunks.length > 0 &&
       "A README excerpt is included below when available — use it for purpose, implementation, and stack details.",
     `Answer using ONLY the retrieved context below. If it is insufficient, use the exact fallback sentence from your instructions.\n\n--- RETRIEVED CONTEXT ---\n${contextBlock}\n--- END CONTEXT ---\n`,
@@ -178,13 +188,15 @@ export async function POST(request: Request) {
 
   const maxOutputTokens = extraChunks.length
     ? CHAT_MAX_OUT_README
-    : isExperienceCareerQuery(lastUser.content)
-      ? CHAT_MAX_OUT_EXPERIENCE
-      : isIdentityQuery(lastUser.content)
-        ? CHAT_MAX_OUT_IDENTITY
-        : CHAT_MAX_OUT_DEFAULT;
+    : isHiringRecruitingAvailabilityQuery(lastUser.content)
+      ? CHAT_MAX_OUT_HIRING
+      : isExperienceCareerQuery(lastUser.content)
+        ? CHAT_MAX_OUT_EXPERIENCE
+        : isIdentityQuery(lastUser.content)
+          ? CHAT_MAX_OUT_IDENTITY
+          : CHAT_MAX_OUT_DEFAULT;
 
-  const modelId = geminiModelId();
+  const modelId = chatModelId();
 
   try {
     const text = await generateGeminiChatReply({
@@ -200,9 +212,9 @@ export async function POST(request: Request) {
       setCachedResponse(cacheKey, text);
     }
 
-    return NextResponse.json({ reply: text, source: "gemini" });
+    return NextResponse.json({ reply: text, source: "groq" });
   } catch (e) {
-    const { message, retryAfterSec, status } = friendlyGeminiError(e);
+    const { message, retryAfterSec, status } = friendlyLlmError(e);
     const headers: Record<string, string> = {};
     if (retryAfterSec != null) {
       headers["Retry-After"] = String(retryAfterSec);

@@ -21,20 +21,23 @@ function evictIfNeeded(): void {
   }
 }
 
-/** Regex + stable key for semantic similarity cache (same answer bucket). */
+/**
+ * Must align with `isIdentityQuery` in retrieve.ts — do NOT match generic "tell me about …"
+ * or unrelated questions share `sem:identity` cache with wrong answers.
+ */
+const IDENTITY_CACHE_RE =
+  /\bwho\s+is\s+akash\b|\bwhat\s+is\s+akash\b|\btell\s+me\s+about\s+akash\b|\bakash\s+bio\b|\bintroduce\s+akash\b|\bwhat\s+do\s+you\s+know\s+about\s+akash\b|\babout\s+akash\b/i;
+
+/**
+ * Do NOT bucket career/work questions under one `sem:experience` key — a single cached reply
+ * was served for every phrasing ("tell me about his experience", Cisco drill-downs, etc.).
+ * Those queries use per-normalized-text `ex:…` keys instead.
+ */
 const SEMANTIC_BUCKETS: { re: RegExp; key: string }[] = [
-  { re: /\b(who\s+is|tell\s+me\s+about|introduce|about\s+akash|akash\s+bio)\b/i, key: "identity" },
-  {
-    re: /\b(work\s+history|employment|internship|internships|professional\s+background|resume|cv)\b/i,
-    key: "experience",
-  },
-  {
-    re: /\b(work|experience|career|jobs?)\b.*\b(akash|his|he)\b|\b(where|what)\s+(did|has|does)\s+(he|akash)\s+work/i,
-    key: "experience",
-  },
   { re: /\bhow\s+many\b.*\b(repo|repos|repository|repositories|github)\b/i, key: "repo-count" },
   { re: /\b(skill|skills|tech\s+stack|technologies|programming\s+languages)\b/i, key: "skills" },
   { re: /\b(best|favorite|favourite)\s+project/i, key: "best-project" },
+  { re: IDENTITY_CACHE_RE, key: "identity" },
 ];
 
 /**

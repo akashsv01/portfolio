@@ -36,7 +36,7 @@ export default function WebGLContextSafety({
     const onContextRestored = () => {
       const pr = Math.min(
         maxDpr,
-        typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1
+        typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1
       );
       gl.setPixelRatio(pr);
       gl.setClearColor(0x000000, clearAlpha);

@@ -240,7 +240,7 @@ export default function PortfolioChat() {
               role: "assistant",
               content:
                 data.error ??
-                "Something went wrong. If chat is not configured, set GEMINI_API_KEY in .env.local (Google AI Studio) and restart the dev server.",
+                "Something went wrong. If chat is not configured, set GROQ_API_KEY in .env.local (Groq) and restart the dev server.",
             },
           ]);
           return;

@@ -1,12 +1,20 @@
 "use client";
 
-import { Suspense, useRef, useEffect } from "react";
+import { Suspense, useRef, useEffect, useState, useMemo } from "react";
 import { useClientOnly } from "@/lib/useClientOnly";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree, invalidate } from "@react-three/fiber";
 import * as THREE from "three";
 import DeskSetup from "./DeskSetup";
 import FloatingParticles from "./FloatingParticles";
 import WebGLContextSafety from "@/components/3d/WebGLContextSafety";
+import { canCreateWebGLContext } from "@/lib/webglSupport";
+
+function ResumeWhenActive({ active }: { active: boolean }) {
+  useEffect(() => {
+    if (active) invalidate();
+  }, [active]);
+  return null;
+}
 
 /*
   Camera setup: R3F orthographic canvas puts camera at [0,0,5] looking at origin.
@@ -89,10 +97,46 @@ function Spinner() {
 
 export default function IsometricRoom() {
   const mounted = useClientOnly();
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [regionInView, setRegionInView] = useState(true);
+
+  const webglOk = useMemo(() => (mounted ? canCreateWebGLContext() : true), [mounted]);
+
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const e = entries[0];
+        if (e) setRegionInView(e.isIntersecting);
+      },
+      { root: null, rootMargin: "60px 0px", threshold: 0 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   if (!mounted) return <Spinner />;
 
+  if (!webglOk) {
+    return (
+      <div
+        ref={hostRef}
+        style={{
+          width: "100%",
+          height: "100%",
+          position: "relative",
+          background: "linear-gradient(165deg, #040b16 0%, #0a1628 45%, #050d18 100%)",
+        }}
+      />
+    );
+  }
+
+  const maxDpr = Math.min(1.5, 2);
+  const loopOn = regionInView;
+
   return (
-    <div style={{ width: "100%", height: "100%", position: "relative" }}>
+    <div ref={hostRef} style={{ width: "100%", height: "100%", position: "relative" }}>
       <div
         style={{
           position: "absolute",
@@ -104,8 +148,9 @@ export default function IsometricRoom() {
         }}
       />
       <Canvas
+        frameloop={loopOn ? "always" : "never"}
         orthographic
-        dpr={[1, 1.5]}
+        dpr={[1, maxDpr]}
         camera={{ position: [10, 12, 10], zoom: 52, near: 0.1, far: 300 }}
         gl={{
           antialias: true,
@@ -119,7 +164,8 @@ export default function IsometricRoom() {
       >
         <CameraSetup />
         <Suspense fallback={null}>
-          <WebGLContextSafety maxDpr={1.5} clearAlpha={0} />
+          <ResumeWhenActive active={loopOn} />
+          <WebGLContextSafety maxDpr={maxDpr} clearAlpha={0} />
           <Scene />
         </Suspense>
       </Canvas>
